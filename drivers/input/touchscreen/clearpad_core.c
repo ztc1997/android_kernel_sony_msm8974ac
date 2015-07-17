@@ -149,6 +149,9 @@
 #define ANALOG_COMMAND_FORCE_CAL			0x02
 #define ANALOG_COMMAND_FORCE_UPDATE			0x04
 
+#define VIB_STRENGTH		40
+#define ANDROID_TOUCH	"android_touch"
+
 #define CLEARPAD_VDD "touch_vdd"
 #define CLEARPAD_VIO "touch_vio"
 
@@ -590,6 +593,7 @@ struct clearpad_t {
 	u32 por_delay_after;
 	u32 reset_count;
 	const char *reset_cause;
+	int vib_strength;
 };
 
 static void clearpad_funcarea_initialize(struct clearpad_t *this);
@@ -2724,8 +2728,9 @@ static void clearpad_report_button(struct clearpad_t *this,
 	if (button->down) {
 		if (!button->down_report) {
 			button->down_report = true;
-			if (valid)
+			if (valid) {
 				input_report_key(this->input, button->code, 1);
+			}
 			LOG_EVENT(this, "%s(%d): down\n",
 				  valid ? "key" : "unused key", button->code);
 		}
@@ -2999,7 +3004,7 @@ static int clearpad_handle_gesture(struct clearpad_t *this)
 		msecs_to_jiffies(this->wakeup_gesture.timeout_delay);
 	else
 		goto exit;
-
+	set_vibrate(this->vib_strength);
 	evdt_execute(this->evdt_node, this->input, wakeint);
 exit:
 	return rc;
@@ -3610,6 +3615,10 @@ static ssize_t clearpad_state_show(struct device *dev,
 								PAGE_SIZE))
 		snprintf(buf, PAGE_SIZE,
 			"%d", this->cover.win_left);
+	else if (!strncmp(attr->attr.name, __stringify(vib_strength),
+								PAGE_SIZE))
+		snprintf(buf, PAGE_SIZE,
+			"%d", this->vib_strength);
 	else
 		snprintf(buf, PAGE_SIZE, "illegal sysfs file");
 	return strnlen(buf, PAGE_SIZE);
@@ -4138,6 +4147,18 @@ exit:
 	return rc ? rc : size;
 }
 
+static ssize_t clearpad_vib_strength_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct clearpad_t *this = dev_get_drvdata(dev);
+
+	sscanf(buf, "%d ", &this->vib_strength);
+	if (this->vib_strength < 0 || this->vib_strength > 90)
+		this->vib_strength = VIB_STRENGTH;
+
+	return count;
+}
+
 static struct device_attribute clearpad_sysfs_attrs[] = {
 	__ATTR(fwinfo, S_IRUGO, clearpad_state_show, 0),
 	__ATTR(fwfamily, S_IRUGO, clearpad_state_show, 0),
@@ -4175,7 +4196,10 @@ static struct device_attribute clearpad_sysfs_attrs[] = {
 				clearpad_cover_win_store),
 	__ATTR(cover_win_left, S_IRUGO | S_IWUSR,
 				clearpad_state_show,
-				clearpad_cover_win_store)
+				clearpad_cover_win_store),
+	__ATTR(vib_strength, S_IRUGO | S_IWUSR,
+				clearpad_state_show,
+				clearpad_vib_strength_store)
 };
 
 static struct device_attribute clearpad_wakeup_gesture_attr =
@@ -5407,6 +5431,13 @@ static int __devinit clearpad_probe(struct platform_device *pdev)
 		if (rc)
 			goto err_irq;
 	}
+
+	rc = sysfs_create_link(NULL, &this->input->dev.kobj, ANDROID_TOUCH);
+	if (rc) {
+		pr_warn("%s: sysfs_create_link failed for android_touch\n", __func__);
+	}
+	
+	this->vib_strength = VIB_STRENGTH;
 
 	goto exit;
 

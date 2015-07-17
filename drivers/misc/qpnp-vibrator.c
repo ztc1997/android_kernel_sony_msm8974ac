@@ -23,6 +23,8 @@
 #include <linux/qpnp/vibrator.h>
 #include "../staging/android/timed_output.h"
 
+#include <linux/clearpad.h>
+
 #define QPNP_VIB_VTG_CTL(base)		(base + 0x41)
 #define QPNP_VIB_EN_CTL(base)		(base + 0x46)
 
@@ -192,6 +194,12 @@ static void qpnp_vib_enable(struct timed_output_dev *dev, int value)
 	spin_unlock_irqrestore(&vib->lock, flags);
 	schedule_work(&vib->work);
 }
+
+void set_vibrate(int value)
+{
+	qpnp_vib_enable(&vib_dev->timed_dev, value);
+}
+EXPORT_SYMBOL(set_vibrate);
 
 static void qpnp_vib_update(struct work_struct *work)
 {

@@ -90,4 +90,6 @@ struct clearpad_data_t {
 #endif
 };
 
+extern void set_vibrate(int value);
+
 #endif
